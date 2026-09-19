@@ -6,7 +6,7 @@ export const methods = ['GET','POST'];
 export default async function(req,res){
   if(req.method==='GET'){
     const key=req.query?.profileKey||'demo-aarushi';
-    const r=await db.query('SELECT * FROM health_events WHERE profile_key=$1 ORDER BY event_date ASC,id ASC LIMIT 2000',[key]);
+    const r=await db.query('SELECT event_date,source_type,metric,value_numeric,unit,confidence FROM health_events WHERE profile_key=$1 ORDER BY event_date ASC,id ASC LIMIT 5000',[key]);
     return res.json({events:r.rows});
   }
   const b=req.body||{};
