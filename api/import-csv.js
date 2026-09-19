@@ -23,14 +23,14 @@ function eventDate(row,h){const i=h.findIndex(x=>/timestamp|datetime|date/.test(
 function unit(metric){return {resting_hr:'bpm',hrv:'ms',sleep:'min',steps:'steps',activity:'min',glucose:'mg/dL',temperature:'°C',lh:'',estrogen:'',pdg:'',stress:'score'}[metric]||null}
 export default async function(req,res){
  const files=req.files||[];if(!files.length)return res.status(400).json({error:'Upload at least one CSV.'});
- let inserted=0;const results=[];
+ let inserted=0;const results=[];const profileKeys=new Set();
  for(const file of files){
   if(file.buffer.length>8*1024*1024){results.push({file:file.filename,error:'Skipped: file exceeds 8 MB.'});continue}
   const rows=parseCSV(file.buffer.toString('utf8'));if(rows.length<2){results.push({file:file.filename,error:'Skipped: no data rows.'});continue}
   const headers=rows[0].map(norm),sourceTable=file.filename.replace(/\.csv$/i,'');let fileInserted=0;const participants=new Set(),metrics=new Set();
   for(const row of rows.slice(1)){
    const pid=participant(row,headers),sd=studyDay(row,headers),date=eventDate(row,headers);if(!date)continue;
-   const profileBase=(req.body&&req.body.profileKey)||'mcphases';const profileKey=pid?profileBase+'_'+pid:profileBase;
+   const profileBase=(req.body&&req.body.profileKey)||'mcphases';const profileKey=pid?profileBase+'_'+pid:profileBase;profileKeys.add(profileKey);
    if(pid)participants.add(pid);
    for(let i=0;i<headers.length;i++){const metric=metricFor(headers[i],file.filename);if(!metric)continue;const value=num(row[i]);if(value===null)continue;
     await db.query('INSERT INTO health_events(profile_key,event_date,source_type,metric,value_numeric,unit,confidence,participant_id,study_day,source_table,raw_metric) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',[profileKey,date,'mcPHASES',metric,value,unit(metric),0.98,pid,sd,sourceTable,rows[0][i]]);inserted++;fileInserted++;metrics.add(metric);
@@ -38,5 +38,5 @@ export default async function(req,res){
   }
   results.push({file:file.filename,eventsInserted:fileInserted,participants:[...participants],metrics:[...metrics]});
  }
- res.json({ok:true,eventsInserted:inserted,files:results,profileKey:(req.body&&req.body.profileKey)||'mcphases'});
+ res.json({ok:true,eventsInserted:inserted,files:results,profileKey:[...profileKeys][0]||((req.body&&req.body.profileKey)||'mcphases'),profileKeys:[...profileKeys]});
 }
