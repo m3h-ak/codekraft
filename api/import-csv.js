@@ -22,7 +22,7 @@ function studyDay(row,h){const i=h.findIndex(x=>x==='day_in_study'||x.endsWith('
 function eventDate(row,h){const i=h.findIndex(x=>/timestamp|datetime|date/.test(x));if(i>=0&&row[i]){const d=new Date(row[i]);if(!isNaN(d))return d.toISOString().slice(0,10)}const sd=studyDay(row,h);if(sd!=null){const d=new Date(Date.UTC(2020,0,1)+sd*86400000);return d.toISOString().slice(0,10)}return null}
 function unit(metric){return {resting_hr:'bpm',hrv:'ms',sleep:'min',steps:'steps',activity:'min',glucose:'mg/dL',temperature:'°C',lh:'',estrogen:'',pdg:'',stress:'score'}[metric]||null}
 export default async function(req,res){
- const files=req.files||[];if(!files.length)return res.status(400).json({error:'Upload at least one CSV.'});
+ const uploaded=req.files||[];const jsonFiles=(req.body&&Array.isArray(req.body.files))?req.body.files:[];const files=[...uploaded,...jsonFiles.map(f=>({filename:f.name||f.filename,buffer:Buffer.from(String(f.content||''),'utf8')}))];if(!files.length)return res.status(400).json({error:'Upload at least one CSV.'});
  let inserted=0;const results=[];const profileKeys=new Set();
  for(const file of files){
   if(file.buffer.length>8*1024*1024){results.push({file:file.filename,error:'Skipped: file exceeds 8 MB.'});continue}
