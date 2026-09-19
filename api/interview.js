@@ -1,13 +1,19 @@
+import { db } from 'hatchable';
+
 export const access = 'public';
 export const methods = ['POST'];
+
 export default async function(req,res){
   const body=req.body||{};
   const answers=body.answers||{};
-  const answered=Object.values(answers).filter(Boolean).length;
+  const profileKey=body.profileKey||'demo-aarushi';
   const factors=[];
-  if(answers.exercise==='less') factors.push('Reduced activity may be contributing to the recent energy/sleep shift.');
-  if(answers.stress==='high') factors.push('Higher stress/workload temporally overlaps with the recent physiological changes.');
-  if(answers.illness==='yes') factors.push('Recent illness is an important alternative context for short-term changes.');
+  if(answers.exercise==='less') factors.push('Reduced activity temporally overlaps the recent energy and sleep shift.');
+  if(answers.stress==='high') factors.push('Higher stress/workload overlaps with the recent physiological changes.');
+  if(answers.illness==='yes') factors.push('Recent illness is important context for interpreting short-term changes.');
   if(answers.meds==='new') factors.push('A medication or supplement change should be included in clinician review.');
-  res.json({answered,factors,interpretation:'These answers add context; they do not establish a diagnosis. The clinician should interpret the pattern alongside the full history and measured labs.'});
+  for(const [k,v] of Object.entries(answers)){
+    await db.query('INSERT INTO interview_answers(profile_key,question_key,answer) VALUES($1,$2,$3)',[profileKey,k,String(v||'')]);
+  }
+  res.json({answered:Object.values(answers).filter(Boolean).length,factors,interpretation:'These answers add context; they do not establish a diagnosis.'});
 }
