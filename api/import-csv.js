@@ -47,6 +47,7 @@ export default async function(req,res){
     metrics.add(metric);
    }
   }
+  let fileInserted=0;
   if(events.length){
    const payload=JSON.stringify(events);
    const q=await db.query(
