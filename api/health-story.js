@@ -1,46 +1,72 @@
+import { db } from 'hatchable';
+
 export const access = 'public';
 export const methods = ['GET'];
 
-function seeded(i, offset=0) {
-  const x = Math.sin(i * 12.9898 + offset * 78.233) * 43758.5453;
-  return x - Math.floor(x);
+function avg(rows,metric){
+  const xs=rows.filter(r=>r.metric===metric && r.value_numeric!=null).map(r=>Number(r.value_numeric));
+  return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null;
+}
+function pct(a,b){return a==null||b==null||a===0?null:Math.round((b-a)/Math.abs(a)*100)}
+function dayKey(r){return r.event_date}
+
+export default async function(req,res){
+  const key=req.query?.profileKey;
+  if(!key){
+    return res.json(await demo());
+  }
+  const {rows}=await db.query(
+    `SELECT event_date,metric,value_numeric,unit,source_type,participant_id,study_day,source_table,raw_metric
+       FROM health_events WHERE profile_key=$1 ORDER BY event_date ASC,id ASC`,[key]
+  );
+  if(!rows.length) return res.status(404).json({error:'No imported health data found for this participant.'});
+
+  const dates=[...new Set(rows.map(dayKey))];
+  const series=dates.map(date=>{
+    const d=rows.filter(r=>r.event_date===date);
+    return {
+      date,
+      studyDay:d.find(x=>x.study_day!=null)?.study_day??null,
+      restingHR:avg(d,'resting_hr'),
+      hrv:avg(d,'hrv'),
+      sleep:avg(d,'sleep'),
+      activity:avg(d,'activity'),
+      glucose:avg(d,'glucose'),
+      temperature:avg(d,'temperature'),
+      stress:avg(d,'stress'),
+      steps:avg(d,'steps')
+    };
+  });
+  const split=Math.max(1,series.length-14);
+  const baseline=series.slice(Math.max(0,split-28),split);
+  const recent=series.slice(split);
+  const metricKeys=['restingHR','hrv','sleep','activity','glucose','temperature','stress','steps'];
+  const changes={};
+  for(const k of metricKeys) changes[k]=pct(
+    baseline.map(x=>x[k]).filter(x=>x!=null).reduce((a,b)=>a+b,0)/(baseline.filter(x=>x[k]!=null).length||1),
+    recent.map(x=>x[k]).filter(x=>x!=null).reduce((a,b)=>a+b,0)/(recent.filter(x=>x[k]!=null).length||1)
+  );
+  const participant=rows[0].participant_id||key.replace(/^mcphases_/,'');
+  const sourceCounts={};
+  for(const r of rows) sourceCounts[r.source_type]=(sourceCounts[r.source_type]||0)+1;
+  const latestByMetric={};
+  for(const r of rows) if(r.value_numeric!=null) latestByMetric[r.metric]={value:r.value_numeric,unit:r.unit,date:r.event_date};
+  const signals=Object.entries(changes).filter(([,v])=>v!=null).map(([metric,change])=>({metric,change}));
+  res.json({
+    profile:{name:`mcPHASES participant ${participant}`,age:null,sex:null,concern:'Longitudinal multimodal health review'},
+    participantId:participant, series, changes, signals,
+    metadata:{eventCount:rows.length,metricCount:new Set(rows.map(r=>r.metric)).size,firstDate:dates[0],lastDate:dates.at(-1),sourceCounts,latestByMetric},
+    symptoms:[],
+    menstrual:{cycleDay:null,recentLengths:[],pattern:'See self-report / hormone signals'},
+    labs:[],
+    provenance:[...new Set(rows.map(r=>[r.metric,r.source_type]))]
+  });
 }
 
-export default async function(req, res) {
-  const days = 84;
-  const start = new Date(Date.now() - (days - 1) * 86400000);
-  const series = [];
-  for (let i = 0; i < days; i++) {
-    const d = new Date(start.getTime() + i * 86400000);
-    const current = i >= 56;
-    const stress = current ? 1 : 0;
-    series.push({
-      date: d.toISOString().slice(0,10),
-      restingHR: Math.round(63 + (current ? 4.8 : 0) + (seeded(i,1)-.5)*3),
-      hrv: Math.round(58 - (current ? 11 : 0) + (seeded(i,2)-.5)*7),
-      sleep: +(7.45 - (current ? .8 : 0) + (seeded(i,3)-.5)*.5).toFixed(1),
-      activity: Math.round(8200 - (current ? 2300 : 0) + (seeded(i,4)-.5)*1200),
-      glucose: +(88 + (current ? 4 : 0) + (seeded(i,5)-.5)*7).toFixed(0),
-      temperature: +(36.55 + (current ? .10 : 0) + (seeded(i,6)-.5)*.08).toFixed(2),
-      fatigue: Math.min(5, Math.max(1, Math.round(2 + stress*2 + (seeded(i,7)-.5))))
-    });
-  }
-  const baseline = series.slice(14, 42);
-  const recent = series.slice(-14);
-  const avg = key => arr => arr.reduce((s,x)=>s+x[key],0)/arr.length;
-  const pct = (a,b) => Math.round((b-a)/a*100);
-  const metrics = ['restingHR','hrv','sleep','activity','glucose'];
-  const changes = Object.fromEntries(metrics.map(k=>[k,pct(avg(k)(baseline),avg(k)(recent))]));
-  res.json({
-    profile:{name:'Aarushi',age:24,sex:'Female',concern:'Fatigue + changing menstrual pattern'},
-    series, changes,
-    symptoms:[{name:'Fatigue',value:4,delta:2},{name:'Sleep quality',value:3,delta:-1},{name:'Stress',value:4,delta:2},{name:'Cramps',value:2,delta:0}],
-    menstrual:{cycleDay:31,recentLengths:[29,31,36,34,38],pattern:'Increasing variability'},
-    labs:[
-      {name:'TSH',value:'4.8',unit:'mIU/L',previous:'2.9',range:'0.4–4.0',flag:'Above reference range'},
-      {name:'Ferritin',value:'18',unit:'ng/mL',previous:'31',range:'15–150',flag:'Low-normal'},
-      {name:'HbA1c',value:'5.4',unit:'%',previous:'5.2',range:'<5.7',flag:'Within reference range'}
-    ],
-    provenance:[['Resting HR','Wearable-derived'],['Fatigue','Patient-reported'],['TSH','Lab-measured'],['Pattern interpretation','AI-inferred']]
-  });
+async function demo(){
+  const days=84,start=new Date(Date.now()-(days-1)*86400000),series=[];
+  for(let i=0;i<days;i++){const d=new Date(start.getTime()+i*86400000),c=i>=56;series.push({date:d.toISOString().slice(0,10),restingHR:Math.round(63+(c?4.8:0)),hrv:Math.round(58-(c?11:0)),sleep:+(7.45-(c?.8:0)).toFixed(1),activity:Math.round(8200-(c?2300:0)),glucose:Math.round(88+(c?4:0)),temperature:+(36.55+(c?.1:0)).toFixed(2),stress:c?4:2,steps:Math.round(8200-(c?2300:0))});}
+  const baseline=series.slice(14,42),recent=series.slice(-14),keys=['restingHR','hrv','sleep','activity','glucose'];
+  const changes=Object.fromEntries(keys.map(k=>[k,pct(avg(baseline,k),avg(recent,k))]));
+  return {profile:{name:'Aarushi',age:24,sex:'Female',concern:'Fatigue + changing menstrual pattern'},series,changes,symptoms:[{name:'Fatigue',value:4,delta:2},{name:'Sleep quality',value:3,delta:-1},{name:'Stress',value:4,delta:2},{name:'Cramps',value:2,delta:0}],menstrual:{cycleDay:31,recentLengths:[29,31,36,34,38],pattern:'Increasing variability'},labs:[{name:'TSH',value:'4.8',unit:'mIU/L',previous:'2.9',range:'0.4–4.0',flag:'Above reference range'},{name:'Ferritin',value:'18',unit:'ng/mL',previous:'31',range:'15–150',flag:'Low-normal'},{name:'HbA1c',value:'5.4',unit:'%',previous:'5.2',range:'<5.7',flag:'Within reference range'}],provenance:[['Resting HR','Wearable-derived'],['Fatigue','Patient-reported'],['TSH','Lab-measured'],['Pattern interpretation','AI-inferred']]};
 }
