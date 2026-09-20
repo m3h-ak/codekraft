@@ -4,16 +4,21 @@ export const access = 'public';
 export const methods = ['GET'];
 
 export default async function(req,res){
-  const { rows } = await db.query(
-    `SELECT profile_key,
-            COALESCE(MAX(participant_id), profile_key) AS participant_id,
-            MIN(event_date) AS first_date,
-            MAX(event_date) AS last_date,
-            COUNT(*)::int AS event_count,
-            COUNT(DISTINCT metric)::int AS metric_count
+  const base=req.query?.profileKey||'my-health-story';
+  const {rows}=await db.query(
+    `SELECT profile_key, participant_id, COUNT(*)::int AS event_count,
+            MIN(event_date) AS first_date, MAX(event_date) AS last_date
        FROM health_events
-      GROUP BY profile_key
-      ORDER BY profile_key`
+      WHERE profile_key=$1 OR profile_key LIKE $2
+      GROUP BY profile_key, participant_id
+      ORDER BY participant_id NULLS LAST, profile_key`,
+    [base, base+'_%']
   );
-  res.json({participants:rows});
+  res.json({profileKey:base,participants:rows.map(r=>({
+    profileKey:r.profile_key,
+    participantId:r.participant_id||r.profile_key.replace(base+'_',''),
+    eventCount:r.event_count,
+    firstDate:r.first_date,
+    lastDate:r.last_date
+  }))});
 }

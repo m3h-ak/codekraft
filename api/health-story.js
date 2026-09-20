@@ -60,7 +60,7 @@ export default async function(req,res){
       rec.reduce((a,b)=>a+b,0)/(rec.length||1)
     );
   }
-  const participant=rows[0].participant_id||key.replace(/^mcphases_/,'');
+  const participant=rows[0].participant_id||key.replace(/^mcphases_/,'').replace(/^my-health-story_/,'');
   const sourceCounts={};
   for(const r of rows) sourceCounts[r.source_type]=(sourceCounts[r.source_type]||0)+1;
   const latestByMetric={};
