@@ -3,11 +3,24 @@ import { db } from 'hatchable';
 export const access = 'public';
 export const methods = ['GET'];
 
-function avg(rows,metric){
-  const xs=rows.filter(r=>r.metric===metric && r.value_numeric!=null).map(r=>Number(r.value_numeric));
-  return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null;
+function median(xs){
+  const a=xs.filter(Number.isFinite).sort((x,y)=>x-y);
+  if(!a.length)return null;
+  const m=Math.floor(a.length/2);
+  return a.length%2?a[m]:(a[m-1]+a[m])/2;
 }
-function pct(a,b){return a==null||b==null||a===0?null:Math.round((b-a)/Math.abs(a)*100)}
+function avg(rows,metric){const xs=rows.filter(r=>r.metric===metric&&r.value_numeric!=null).map(r=>Number(r.value_numeric));return xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null}
+function dailyMedian(rows,metric,dateSet){
+  const byDate=new Map();
+  for(const r of rows){
+    if(r.metric!==metric || r.value_numeric==null || !dateSet.has(r.event_date))continue;
+    const a=byDate.get(r.event_date)||[];
+    a.push(Number(r.value_numeric));
+    byDate.set(r.event_date,a);
+  }
+  return [...byDate.values()].map(median).filter(Number.isFinite);
+}
+function pct(a,b){return a==null||b==null||a===0?null:Math.round((b-a)/Math.abs(a)*1000)/10}
 function dayKey(r){return r.event_date}
 
 export default async function(req,res){
@@ -52,13 +65,31 @@ export default async function(req,res){
   const recent=series.slice(split);
   const metricKeys=metrics;
   const changes={};
+  const changeDetails={};
+  const baselineDates=new Set(baseline.map(x=>x.date));
+  const recentDates=new Set(recent.map(x=>x.date));
   for(const k of metricKeys){
-    const base=baseline.map(x=>x.values[k]).filter(x=>x!=null);
-    const rec=recent.map(x=>x.values[k]).filter(x=>x!=null);
-    changes[k]=pct(
-      base.reduce((a,b)=>a+b,0)/(base.length||1),
-      rec.reduce((a,b)=>a+b,0)/(rec.length||1)
-    );
+    const base=dailyMedian(rows,k,baselineDates);
+    const rec=dailyMedian(rows,k,recentDates);
+    const baselineValue=median(base);
+    const recentValue=median(rec);
+    const changePct=pct(baselineValue,recentValue);
+    const recent7=rec.slice(-7);
+    const previous7=rec.slice(-14,-7);
+    const recent7Value=median(recent7);
+    const previous7Value=median(previous7);
+    const trend7Pct=pct(previous7Value,recent7Value);
+    changes[k]=changePct;
+    changeDetails[k]={
+      baseline:baselineValue==null?null:Math.round(baselineValue*100)/100,
+      recent:recentValue==null?null:Math.round(recentValue*100)/100,
+      changePct,
+      recent7:recent7Value==null?null:Math.round(recent7Value*100)/100,
+      previous7:previous7Value==null?null:Math.round(previous7Value*100)/100,
+      trend7Pct,
+      baselineDays:base.length,
+      recentDays:rec.length
+    };
   }
   const participant=rows[0].participant_id||key.replace(/^mcphases_/,'').replace(/^my-health-story_/,'');
   const sourceCounts={};
@@ -68,7 +99,7 @@ export default async function(req,res){
   const signals=Object.entries(changes).filter(([,v])=>v!=null).map(([metric,change])=>({metric,change}));
   res.json({
     profile:{name:`mcPHASES participant ${participant}`,age:null,sex:null,concern:'Longitudinal multimodal health review'},
-    participantId:participant, series, changes, signals, metrics,
+    participantId:participant, series, changes, changeDetails, signals, metrics,
     metadata:{eventCount:rows.length,metricCount:new Set(rows.map(r=>r.metric)).size,firstDate:dates[0],lastDate:dates.at(-1),sourceCounts,latestByMetric},
     symptoms:[],
     menstrual:{cycleDay:null,recentLengths:[],pattern:'See self-report / hormone signals'},

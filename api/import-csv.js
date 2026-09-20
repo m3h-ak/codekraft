@@ -69,7 +69,16 @@ export default async function(req,res){
    const q=await db.query(
     `INSERT INTO health_events(profile_key,event_date,source_type,metric,value_numeric,unit,confidence,participant_id,study_day,source_table,raw_metric)
      SELECT profile_key,event_date,source_type,metric,value_numeric,unit,confidence,participant_id,study_day,source_table,raw_metric
-     FROM jsonb_to_recordset($1::jsonb) AS x(profile_key text,event_date date,source_type text,metric text,value_numeric double precision,unit text,confidence double precision,participant_id text,study_day integer,source_table text,raw_metric text)`,
+     FROM jsonb_to_recordset($1::jsonb) AS x(profile_key text,event_date date,source_type text,metric text,value_numeric double precision,unit text,confidence double precision,participant_id text,study_day integer,source_table text,raw_metric text)
+     WHERE NOT EXISTS (
+       SELECT 1 FROM health_events h
+       WHERE h.profile_key=x.profile_key
+         AND h.event_date=x.event_date
+         AND h.metric=x.metric
+         AND h.value_numeric=x.value_numeric
+         AND COALESCE(h.source_table,'')=COALESCE(x.source_table,'')
+         AND COALESCE(h.participant_id,'')=COALESCE(x.participant_id,'')
+     )`,
     [payload]
    );
    fileInserted=events.length;inserted+=events.length;

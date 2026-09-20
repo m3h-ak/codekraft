@@ -8,7 +8,8 @@ export default async function(req,res){
   const answers=body.answers||{};
   const profileKey=body.profileKey||'demo-aarushi';
   const factors=[];
-  if(answers.exercise==='less') factors.push('Reduced activity temporally overlaps the recent energy and sleep shift.');
+  if(answers.exercise==='intentional') factors.push('A deliberate reduction in activity temporally overlaps the recent changes.');
+  if(answers.exercise==='harder') factors.push('Exercise becoming harder temporally overlaps the recent changes.');
   if(answers.stress==='high') factors.push('Higher stress/workload overlaps with the recent physiological changes.');
   if(answers.illness==='yes') factors.push('Recent illness is important context for interpreting short-term changes.');
   if(answers.meds==='new') factors.push('A medication or supplement change should be included in clinician review.');
