@@ -1,6 +1,11 @@
-export const access = 'public';
-export const methods = ['POST'];
+import { db } from 'hatchable';
+export const access='public';
+export const methods=['GET','POST'];
 export default async function(req,res){
-  const body=req.body||{};
-  res.json({ok:true,id:'review_'+Date.now(),status:'pending',profileKey:body.profileKey||'demo-aarushi',message:'Clinician review requested.'});
+ const key=req.query?.profileKey||req.body?.profileKey||'my-health-story';
+ if(req.method==='GET'){
+  const {rows}=await db.query('SELECT id,status,decision,note,created_at,updated_at FROM review_requests WHERE profile_key=$1 ORDER BY created_at DESC LIMIT 1',[key]);
+  return res.json({review:rows[0]||null});
+ }
+ res.json({ok:true,message:'Use the clinical review action to submit the longitudinal evidence for clinician confirmation.'});
 }

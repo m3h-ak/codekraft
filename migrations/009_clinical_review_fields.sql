@@ -1,0 +1,1 @@
+ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS evidence_json TEXT
