@@ -1,4 +1,4 @@
-import { db, ai, email } from 'hatchable';
+import { db, ai } from 'hatchable';
 export const access='public';
 export const methods=['POST'];
 const clip=(v,n)=>JSON.stringify(v).slice(0,n);
@@ -19,6 +19,6 @@ export default async function(req,res){
   draft=r.text;
  }catch(e){return res.status(502).json({error:'AI review draft unavailable',detail:String(e.message||e)})}
  const {rows}=await db.query('INSERT INTO review_requests (profile_key,status,ai_summary,evidence_json,updated_at) VALUES ($1,$2,$3,$4,now()) RETURNING id,status,created_at',[key,'pending',draft,clip(evidence,30000)]);
- try{await email.send({to:'clinician@pulsestory.local',subject:'PulseStory clinician review requested',html:'A PulseStory AI review draft is waiting for clinician confirmation. Review ID '+rows[0].id+' for profile '+key+'.'})}catch(e){}
+ // Prototype mode: do not email a placeholder address or imply that a real clinician received the patient's health data.
  res.json({status:'pending_clinician_review',reviewId:rows[0].id,message:'Draft prepared and held for clinician confirmation. It will not be shown as medical guidance until approved.'});
 }
