@@ -29,7 +29,11 @@ $('chart').innerHTML=metricRows||'<p class="muted">No numeric observations found
     rows.sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
     const relRows=rows.slice(0,5).map(x=>{
       const same=(x.r>0)===(anchor.changePct>0);
-      return '<div class="evidence-item"><div><b>'+esc(metricLabels[x.metric]||x.metric)+'</b><small>'+ (same?'Moved in the same direction':'Moved in the opposite direction') +' · '+x.n+' overlapping days</small></div><strong class="'+(same?'change-up':'change-down')+'">r '+x.r.toFixed(2)+'</strong></div>';
+      const anchorName=(metricLabels[anchor.metric]||anchor.metric).toLowerCase(), otherName=(metricLabels[x.metric]||x.metric).toLowerCase();
+      const sentence=same
+        ? 'When '+esc(anchorName)+' was higher, '+esc(otherName)+' also tended to be higher.'
+        : 'When '+esc(anchorName)+' was higher, '+esc(otherName)+' tended to be lower.';
+      return '<div class="evidence-item"><div><b>'+esc(metricLabels[x.metric]||x.metric)+'</b><small>'+sentence+' · '+x.n+' overlapping days</small></div><strong class="'+(same?'change-up':'change-down')+'">r '+x.r.toFixed(2)+'</strong></div>';
     }).join('');
     const direction=anchor.changePct>0?'increased':'decreased';
     return '<article class="panel connection-story"><div class="eyebrow">'+esc(metricLabels[anchor.metric]||anchor.metric)+' '+direction+'</div><h3>'+esc(metricLabels[anchor.metric]||anchor.metric)+' '+direction+' <strong>'+ (anchor.changePct>0?'+':'')+fmt(anchor.changePct)+'%</strong></h3><p class="muted">What else moved while '+esc(metricLabels[anchor.metric]||anchor.metric).toLowerCase()+' was '+direction+'? These are the strongest same-period associations in the recent 14 observed days.</p>'+ (relRows||'<p class="muted">No strong same-period associations were found yet.</p>') +'<p class="muted connection-note">Association only — this does not show that '+esc(metricLabels[anchor.metric]||anchor.metric).toLowerCase()+' caused the other change.</p></article>';
