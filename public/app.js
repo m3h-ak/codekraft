@@ -9,36 +9,14 @@ const metricRows=metrics.map(metric=>{
   return '<div class="metric-row"><div class="metric-title"><b>'+esc(metricLabels[metric]||metric)+'</b><span>'+fmt(latest.value)+' · '+esc(latest.date)+'</span></div><div class="metric-chart">'+bars+'</div></div>';
 }).join('');
 $('chart').innerHTML=metricRows||'<p class="muted">No numeric observations found for this profile.</p>';const findingMap=Object.fromEntries(findings.map(f=>[f.metric,f]));const allChanges=data.changes||{},details=data.changeDetails||{};$('evidence').innerHTML=Object.entries(allChanges).filter(([,v])=>v!=null).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([metric,change])=>{const f=findingMap[metric],d=details[metric]||{},trend=d.trend7Pct;const context=d.baseline!=null&&d.recent!=null?'Baseline '+fmt(d.baseline)+' → recent '+fmt(d.recent)+(d.previous7!=null&&d.recent7!=null?' · last 7 days '+(trend>0?'+':'')+fmt(trend)+'% vs prior 7':''):'';return '<div class="evidence-item"><div><b>'+esc(metricLabels[metric]||metric)+'</b><small>'+esc(context)+(context?' · ':'')+(f?(f.persistentDays+' days outside threshold · '+esc(f.source||'measured')):'Observed change · not persistent by current rule')+'</small></div><strong class="'+(change>0?'change-up':'change-down')+'">'+(change>0?'+':'')+fmt(change)+'%</strong></div>'}).join('')||'<p class="muted">No numeric changes available for this story yet.</p>';$('pairs').innerHTML=(ins?.pairs||[]).length?(ins.pairs.map(p=>'<div class="evidence-pair"><b>'+p.overlapDays+' overlapping days</b><br>'+p.metrics.map(esc).join(' + ')+'</div>').join('')):'<p class="muted">As more signals are added, PulseStory will show which changes happened together.</p>';(() => {
-  const recentSeries=(data.series||[]).slice(-14);
-  const anchors=findings.filter(f=>f.changePct!=null).slice().sort((a,b)=>Math.abs(b.changePct)-Math.abs(a.changePct)).slice(0,6);
-  const pearson=(a,b)=>{
-    const n=a.length;if(n<5)return null;
-    const am=a.reduce((x,y)=>x+y,0)/n,bm=b.reduce((x,y)=>x+y,0)/n;
-    let num=0,da=0,db=0;for(let i=0;i<n;i++){const x=a[i]-am,y=b[i]-bm;num+=x*y;da+=x*x;db+=y*y}
-    return da&&db?num/Math.sqrt(da*db):null;
-  };
-  const storyCards=anchors.map(anchor=>{
-    const rows=[];
-    for(const metric of metrics){
-      if(metric===anchor.metric)continue;
-      const pairs=recentSeries.map(d=>[d.values?.[anchor.metric],d.values?.[metric]]).filter(x=>Number.isFinite(Number(x[0]))&&Number.isFinite(Number(x[1])));
-      const r=pearson(pairs.map(x=>Number(x[0])),pairs.map(x=>Number(x[1])));
-      if(r==null||Math.abs(r)<0.3)continue;
-      rows.push({metric,r,n:pairs.length});
-    }
-    rows.sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
-    const relRows=rows.slice(0,5).map(x=>{
-      const same=(x.r>0)===(anchor.changePct>0);
-      const anchorName=(metricLabels[anchor.metric]||anchor.metric).toLowerCase(), otherName=(metricLabels[x.metric]||x.metric).toLowerCase();
-      const sentence=same
-        ? 'When '+esc(anchorName)+' was higher, '+esc(otherName)+' also tended to be higher.'
-        : 'When '+esc(anchorName)+' was higher, '+esc(otherName)+' tended to be lower.';
-      return '<div class="evidence-item"><div><b>'+esc(metricLabels[x.metric]||x.metric)+'</b><small>'+sentence+' · '+x.n+' overlapping days</small></div><strong class="'+(same?'change-up':'change-down')+'">r '+x.r.toFixed(2)+'</strong></div>';
-    }).join('');
-    const direction=anchor.changePct>0?'increased':'decreased';
-    return '<article class="panel connection-story"><div class="eyebrow">'+esc(metricLabels[anchor.metric]||anchor.metric)+' '+direction+'</div><h3>'+esc(metricLabels[anchor.metric]||anchor.metric)+' '+direction+' <strong>'+ (anchor.changePct>0?'+':'')+fmt(anchor.changePct)+'%</strong></h3><p class="muted">What else moved while '+esc(metricLabels[anchor.metric]||anchor.metric).toLowerCase()+' was '+direction+'? These are the strongest same-period associations in the recent 14 observed days.</p>'+ (relRows||'<p class="muted">No strong same-period associations were found yet.</p>') +'<p class="muted connection-note">Association only — this does not show that '+esc(metricLabels[anchor.metric]||anchor.metric).toLowerCase()+' caused the other change.</p></article>';
+  const apiRelationships=(data.relationships?.relationships||[]).filter(x=>x&&x.a&&x.b&&Number.isFinite(Number(x.r)));
+  const storyCards=apiRelationships.slice(0,12).map(p=>{
+    const aName=metricLabels[p.a]||p.a,bName=metricLabels[p.b]||p.b;
+    const timing=p.lagDays?Math.abs(Number(p.lagDays))+' day lag':'same day';
+    const direction=Number(p.r)>=0?'moved together':'moved in opposite directions';
+    return '<article class="panel connection-story"><div class="eyebrow">PATTERN FOUND · '+esc(String(p.strength||'association').toUpperCase())+'</div><h3>'+esc(aName)+' ↔ '+esc(bName)+'</h3><p class="muted">'+esc(aName)+' and '+esc(bName)+' '+direction+' in this timeline. The strongest relationship was '+esc(timing)+'.</p><div class="evidence-item"><div><b>Correlation</b><small>'+esc(String(p.sampleSize||'—'))+' paired observations · '+esc(String(p.overlapDays||p.sampleSize||'—'))+' overlapping days</small></div><strong class="change-up">r '+Number(p.r).toFixed(2)+'</strong></div><p class="muted connection-note">Association only — correlation does not establish a cause or diagnosis.</p></article>';
   }).join('');
-  $('relationships').innerHTML=storyCards||'<p class="muted">No recent changes are available to explore yet. Add more observations and PulseStory will build connections around the signals that actually changed.</p>';
+  $('relationships').innerHTML=storyCards||'<p class="muted">Not enough overlapping data to identify meaningful connections yet. Add more daily observations across at least two signals.</p>';
 })();$('briefChanges').innerHTML=findings.map(f=>'<li>'+esc(f.metric)+' changed '+(f.changePct>0?'+':'')+fmt(f.changePct)+'% from personal baseline and remained outside the baseline threshold for '+f.persistentDays+' observed days.</li>').join('')||'<li>No persistent deviations detected.</li>';$('briefTimeline').textContent=data.metadata?('Observed '+data.metadata.firstDate+' → '+data.metadata.lastDate+'. The recent window is compared with the preceding personal baseline period.'):'Demo timeline.';$('briefFollowup').textContent=findings.length?'The pattern above can be surfaced to a clinician as a possible area for further investigation. PulseStory does not prescribe or autonomously order tests.':'No follow-up suggestion generated from the current evidence.';/* Source provenance stays in the data layer for traceability; internal source labels are not shown in the user UI. */}async function loadStoryProfile(){const base=$('profileKey')?.value||'my-health-story';const r=await fetch('/api/participants?profileKey='+encodeURIComponent(base));if(r.ok){const j=await r.json();if(j.participants?.length&&!j.participants.some(p=>p.profileKey===selectedKey))selectedKey=j.participants[0].profileKey;}}async function loadStory(){const r=await fetch('/api/health-story?profileKey='+encodeURIComponent(selectedKey));if(r.ok){data=await r.json();const ir=await fetch('/api/insights?profileKey='+encodeURIComponent(selectedKey));data.insights=ir.ok?await ir.json():null;const rr=await fetch('/api/relationships?profileKey='+encodeURIComponent(selectedKey));data.relationships=rr.ok?await rr.json():null}else{data={profile:{name:'Your health story',concern:'Upload your data to start'},series:[],changes:{},provenance:[]};data.insights=null}render()}let adaptiveQuestions=[];
 async function loadAdaptiveQuestions(){
  const root=$('adaptiveQuestions');if(!root)return;

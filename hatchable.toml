@@ -9,3 +9,7 @@ enabled = true
 providers = ["email"]
 hosted_login = true
 login_path = "/login"
+
+[db.tables.account_profiles]
+read = "own"
+write = "own"

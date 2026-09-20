@@ -1,4 +1,4 @@
-import { db, ai } from 'hatchable';
+import { db, ai, email } from 'hatchable';
 export const access='user';
 export const methods=['POST'];
 const clip=(v,n)=>JSON.stringify(v).slice(0,n);
@@ -19,6 +19,15 @@ export default async function(req,res){
   draft=r.text;
  }catch(e){return res.status(502).json({error:'AI review draft unavailable',detail:String(e.message||e)})}
  const {rows}=await db.query('INSERT INTO review_requests (profile_key,status,ai_summary,evidence_json,updated_at) VALUES ($1,$2,$3,$4,now()) RETURNING id,status,created_at',[key,'pending',draft,clip(evidence,30000)]);
- // Prototype mode: do not email a placeholder address or imply that a real clinician received the patient's health data.
- res.json({status:'pending_clinician_review',reviewId:rows[0].id,message:'Draft prepared and held for clinician confirmation. It will not be shown as medical guidance until approved.'});
+ const clinicianEmail='docrajivsingla@gmail.com';
+ let emailed=false;
+ try{
+  await email.send({
+   to:clinicianEmail,
+   subject:'PulseStory clinician review request #'+rows[0].id,
+   html:'<p>A PulseStory user has explicitly requested a clinician review.</p><p><b>Review #'+rows[0].id+'</b></p><p>The AI draft below is a decision-support draft and has not been presented as clinician-approved guidance.</p><pre style="white-space:pre-wrap;font-family:Arial,sans-serif">'+String(draft).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</pre><p>Please reply to this email or contact the patient through the appropriate clinical channel if you choose to review the request.</p>'
+  });
+  emailed=true;
+ }catch(e){ console.error('clinician email failed',e); }
+ res.json({status:'pending_clinician_review',reviewId:rows[0].id,emailed,message:emailed?'AI review draft emailed to Dr. Rajiv Singla. This does not mean the clinician has reviewed it yet.':'Review saved, but the clinician email could not be sent. No clinician review has occurred.'});
 }
