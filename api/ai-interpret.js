@@ -10,10 +10,10 @@ export default async function(req,res){
   const compact=JSON.stringify(evidence).slice(0,12000);
   try{
     const result=await ai.generateText({
-      model:'gpt-mini',
+      model:'gpt-5.4-mini',
       purpose:'pulsestory-clinical-interpretation',
       system:'You are a clinical data summarization assistant. Do not diagnose, recommend treatment, or independently order tests. Identify longitudinal changes, temporal relationships, missing context, contradictions, and questions that would help a clinician. Clearly distinguish measured facts from interpretation. Keep the output concise and clinician-ready.',
-      prompt:'Analyze this longitudinal health evidence and return: 1) meaningful changes, 2) signals that co-occur, 3) missing context, 4) 3 highest-value follow-up questions, 5) a cautious clinician-review statement. Evidence: '+compact,
+      prompt:'Analyze this longitudinal health evidence. Return exactly these five sections, each with a short heading on its own line: Meaningful changes; What changed together; Missing context; Questions for you; Clinician review. Use short bullets, plain language, and measured facts first. Never diagnose, prescribe, or imply certainty. Evidence: '+compact,
       maxTokens:1200
     });
     res.json({interpretation:result.text,usage:result.usage});
