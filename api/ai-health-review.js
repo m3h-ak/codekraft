@@ -15,7 +15,7 @@ export default async function(req,res){
  const prompt='Review this longitudinal health evidence for a licensed clinician. Identify persistent/concerning patterns, low-risk actions that could be discussed, and investigations a clinician might consider. Do not diagnose, prescribe, or claim causation. For menstrual data, flag cycle irregularity, unusually persistent symptoms, or patterns that merit clinician review, but do not label a condition. Return concise JSON with summary, actions, tests, flags, questions. Evidence: '+clip(evidence,24000);
  let draft;
  try{
-  const r=await ai.generateText({model:'gpt-mini',purpose:'pulsestory-clinical-review-draft',system:'You are a conservative clinical decision-support assistant. Every recommendation must be reviewed by a licensed clinician before the person sees it. Distinguish observations from hypotheses and uncertainty.',prompt,maxTokens:1800});
+  const r=await ai.generateText({model:'gpt-5.4-mini',purpose:'pulsestory-clinical-review-draft',system:'You are a conservative clinical decision-support assistant. Every recommendation must be reviewed by a licensed clinician before the person sees it. Distinguish observations from hypotheses and uncertainty.',prompt,maxTokens:1800});
   draft=r.text;
  }catch(e){return res.status(502).json({error:'AI review draft unavailable',detail:String(e.message||e)})}
  const {rows}=await db.query('INSERT INTO review_requests (profile_key,status,ai_summary,evidence_json,updated_at) VALUES ($1,$2,$3,$4,now()) RETURNING id,status,created_at',[key,'pending',draft,clip(evidence,30000)]);
