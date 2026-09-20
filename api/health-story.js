@@ -40,8 +40,15 @@ export default async function(req,res){
       steps:values.steps??null
     };
   });
-  const split=Math.max(1,series.length-14);
-  const baseline=series.slice(Math.max(0,split-28),split);
+  // Compare meaningful periods. For short test datasets (e.g. two weeks),
+  // compare the first half with the second half rather than comparing one
+  // first-day observation against the remaining days. For longer histories,
+  // use the preceding 14 observed days as the baseline and the latest 14 as recent.
+  const recentWindow=series.length<=28 ? Math.max(1,Math.floor(series.length/2)) : 14;
+  const split=Math.max(1,series.length-recentWindow);
+  const baseline=series.length<=28
+    ? series.slice(0,split)
+    : series.slice(Math.max(0,split-28),split);
   const recent=series.slice(split);
   const metricKeys=metrics;
   const changes={};
