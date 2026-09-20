@@ -35,11 +35,27 @@ export default async function(req,res){
   if(rows.length<2){results.push({file:file.filename,error:'Skipped: no data rows.'});continue}
   const headers=rows[0].map(norm),sourceTable=file.filename.replace(/\.csv$/i,'');
   const events=[],participants=new Set(),metrics=new Set();
+  const longDate=headers.findIndex(x=>x==='date'||x==='event_date'||x==='day');
+  const longMetric=headers.findIndex(x=>x==='metric'||x==='measure'||x==='signal');
+  const longValue=headers.findIndex(x=>x==='value'||x==='value_numeric'||x==='measurement');
+  const longUnit=headers.findIndex(x=>x==='unit'||x==='units');
+  const isLongFormat=longDate>=0&&longMetric>=0&&longValue>=0;
   for(const row of rows.slice(1)){
-   const pid=participant(row,headers),sd=studyDay(row,headers),date=eventDate(row,headers);if(!date)continue;
+   const pid=participant(row,headers),sd=studyDay(row,headers);
    const profileBase=(req.body&&req.body.profileKey)||'mcphases';
    const profileKey=pid?profileBase+'_'+pid:profileBase;profileKeys.add(profileKey);
    if(pid)participants.add(pid);
+   if(isLongFormat){
+    const rawMetric=String(row[longMetric]||'').trim();
+    const metric=norm(rawMetric); const value=num(row[longValue]);
+    let date=null;
+    if(row[longDate]){const d=new Date(row[longDate]);if(!isNaN(d))date=d.toISOString().slice(0,10)}
+    if(!date||!metric||value===null)continue;
+    events.push({profile_key:profileKey,event_date:date,source_type:'mcPHASES',metric,value_numeric:value,unit:longUnit>=0?String(row[longUnit]||'').trim()||unit(metric):unit(metric),confidence:0.98,participant_id:pid,study_day:sd,source_table:sourceTable,raw_metric:rawMetric});
+    metrics.add(metric);
+    continue;
+   }
+   const date=eventDate(row,headers);if(!date)continue;
    for(let i=0;i<headers.length;i++){
     const metric=metricFor(headers[i],file.filename);if(!metric)continue;
     const value=num(row[i]);if(value===null)continue;
