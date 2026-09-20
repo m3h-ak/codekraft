@@ -81,7 +81,7 @@ export default async function(req,res){
      )`,
     [payload]
    );
-   fileInserted=events.length;inserted+=events.length;
+   fileInserted=q.rowCount||0;inserted+=fileInserted;
   } else fileInserted=0;
   results.push({file:file.filename,eventsInserted:fileInserted,participants:[...participants],metrics:[...metrics]});
  }
