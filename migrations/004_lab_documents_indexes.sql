@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_lab_documents_profile_date ON lab_documents (profile_key, document_date DESC, created_at DESC)

@@ -69,6 +69,14 @@ export default async function(req,res){
     [profileKey]
   )).rows;
 
+  const labDocuments = (await db.query(
+    `SELECT id, document_date, title, document_type, provider, notes, original_filename
+       FROM lab_documents
+      WHERE profile_key = $1
+      ORDER BY document_date DESC NULLS LAST, created_at DESC`,
+    [profileKey]
+  )).rows;
+
   const answers = (await db.query(
     `SELECT question_key, answer
        FROM interview_answers
@@ -123,6 +131,15 @@ export default async function(req,res){
       <td>${pct(d.changePct)}</td>
     </tr>`;
   }).join('');
+
+  const labRows = labDocuments.map(d => `<tr>
+    <td>${esc(String(d.document_date || 'Date not entered'))}</td>
+    <td><b>${esc(d.title)}</b><br><span class="small">${esc(d.original_filename)}</span></td>
+    <td>${esc(d.document_type || 'Medical record')}</td>
+    <td>${esc(d.provider || '—')}</td>
+    <td>${d.notes ? esc(d.notes) : '—'}</td>
+    <td><a href="/api/lab-documents/${d.id}">Open</a></td>
+  </tr>`).join('') || '<tr><td colspan="6">No stored medical documents yet.</td></tr>';
 
   const reportDate = new Date().toISOString().slice(0,10);
   const displayName = profile.name || 'My Health Story';
@@ -221,7 +238,16 @@ li{margin:2px 0}
 </section>
 
 <section>
-<h2>5 · Method & interpretation notes</h2>
+<h2>5 · Previous lab & medical documents</h2>
+<p class="small">Original reports stored in PulseStory. The links open the source document so the clinician can review the exact report when needed.</p>
+<table>
+<thead><tr><th>Date</th><th>Report</th><th>Type</th><th>Provider</th><th>Notes / key results</th><th>File</th></tr></thead>
+<tbody>${labRows}</tbody>
+</table>
+</section>
+
+<section>
+<h2>6 · Method & interpretation notes</h2>
 <ul>
 <li>Multiple readings on the same date are reduced to a daily median before change calculations.</li>
 <li>Recent period: latest 14 observed days. Baseline period: preceding 28 observed days when available.</li>
