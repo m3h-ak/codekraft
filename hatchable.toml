@@ -1,5 +1,8 @@
 [ai]
 required = true
 
+[[secret]]
+name = "AI_PROVIDER"
+
 [auth]
 enabled = false
