@@ -30,7 +30,7 @@ export default async function(req,res){
  let inserted=0;const results=[];const profileKeys=new Set();
 
  for(const file of files){
-  if(file.buffer.length>8*1024*1024){results.push({file:file.filename,error:'Skipped: file exceeds 8 MB.'});continue}
+  if(file.buffer.length>20*1024*1024){results.push({file:file.filename,error:'Skipped: file exceeds 20 MB.'});continue}
   const rows=parseCSV(file.buffer.toString('utf8'));
   if(rows.length<2){results.push({file:file.filename,error:'Skipped: no data rows.'});continue}
   const headers=rows[0].map(norm),sourceTable=file.filename.replace(/\.csv$/i,'');
