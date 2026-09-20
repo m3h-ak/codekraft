@@ -22,30 +22,37 @@ export default async function(req,res){
   if(!rows.length) return res.status(404).json({error:'No imported health data found for this participant.'});
 
   const dates=[...new Set(rows.map(dayKey))];
+  const metrics=[...new Set(rows.map(r=>r.metric))].sort();
   const series=dates.map(date=>{
     const d=rows.filter(r=>r.event_date===date);
+    const values=Object.fromEntries(metrics.map(metric=>[metric,avg(d,metric)]));
     return {
       date,
       studyDay:d.find(x=>x.study_day!=null)?.study_day??null,
-      restingHR:avg(d,'resting_hr'),
-      hrv:avg(d,'hrv'),
-      sleep:avg(d,'sleep'),
-      activity:avg(d,'activity'),
-      glucose:avg(d,'glucose'),
-      temperature:avg(d,'temperature'),
-      stress:avg(d,'stress'),
-      steps:avg(d,'steps')
+      values,
+      restingHR:values.resting_hr??null,
+      hrv:values.hrv??null,
+      sleep:values.sleep??null,
+      activity:values.activity??null,
+      glucose:values.glucose??null,
+      temperature:values.temperature??null,
+      stress:values.stress??null,
+      steps:values.steps??null
     };
   });
   const split=Math.max(1,series.length-14);
   const baseline=series.slice(Math.max(0,split-28),split);
   const recent=series.slice(split);
-  const metricKeys=['restingHR','hrv','sleep','activity','glucose','temperature','stress','steps'];
+  const metricKeys=metrics;
   const changes={};
-  for(const k of metricKeys) changes[k]=pct(
-    baseline.map(x=>x[k]).filter(x=>x!=null).reduce((a,b)=>a+b,0)/(baseline.filter(x=>x[k]!=null).length||1),
-    recent.map(x=>x[k]).filter(x=>x!=null).reduce((a,b)=>a+b,0)/(recent.filter(x=>x[k]!=null).length||1)
-  );
+  for(const k of metricKeys){
+    const base=baseline.map(x=>x.values[k]).filter(x=>x!=null);
+    const rec=recent.map(x=>x.values[k]).filter(x=>x!=null);
+    changes[k]=pct(
+      base.reduce((a,b)=>a+b,0)/(base.length||1),
+      rec.reduce((a,b)=>a+b,0)/(rec.length||1)
+    );
+  }
   const participant=rows[0].participant_id||key.replace(/^mcphases_/,'');
   const sourceCounts={};
   for(const r of rows) sourceCounts[r.source_type]=(sourceCounts[r.source_type]||0)+1;
@@ -54,7 +61,7 @@ export default async function(req,res){
   const signals=Object.entries(changes).filter(([,v])=>v!=null).map(([metric,change])=>({metric,change}));
   res.json({
     profile:{name:`mcPHASES participant ${participant}`,age:null,sex:null,concern:'Longitudinal multimodal health review'},
-    participantId:participant, series, changes, signals,
+    participantId:participant, series, changes, signals, metrics,
     metadata:{eventCount:rows.length,metricCount:new Set(rows.map(r=>r.metric)).size,firstDate:dates[0],lastDate:dates.at(-1),sourceCounts,latestByMetric},
     symptoms:[],
     menstrual:{cycleDay:null,recentLengths:[],pattern:'See self-report / hormone signals'},
