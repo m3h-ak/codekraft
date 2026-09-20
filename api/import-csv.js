@@ -1,9 +1,10 @@
 import { db } from 'hatchable';
 
-export const access = 'user';
+export const access = 'member';
 export const methods = ['POST'];
 
-function parseCSV(text){const rows=[];let row=[],cell='',quote=false;for(let i=0;i<text.length;i++){const ch=text[i],next=text[i+1];if(ch==='"'&&quote&&next==='"'){cell+='"';i++;continue}if(ch==='"'){quote=!quote;continue}if(ch===','&&!quote){row.push(cell.trim());cell='';continue}if((ch==='\n'||ch==='\r')&&!quote){if(ch==='\r'&&next==='\n')i++;row.push(cell.trim());cell='';if(row.some(Boolean))rows.push(row);row=[];continue}cell+=ch}if(cell||row.length){row.push(cell.trim());if(row.some(Boolean))rows.push(row)}return rows}
+function decodeUpload(buffer){if(typeof buffer==='string')return buffer;if(buffer&&typeof buffer.toString==='function'){try{const s=buffer.toString('utf8');if(!/^[\d,\s]+$/.test(s.slice(0,200))||s.includes('\n'))return s}catch{}}try{return new TextDecoder('utf-8').decode(buffer instanceof Uint8Array?buffer:new Uint8Array(buffer))}catch{return String(buffer??'')}}
+function parseCSV(text){text=String(text||'').replace(/^\uFEFF/,'');const rows=[];let row=[],cell='',quote=false;for(let i=0;i<text.length;i++){const ch=text[i],next=text[i+1];if(ch==='"'&&quote&&next==='"'){cell+='"';i++;continue}if(ch==='"'){quote=!quote;continue}if(ch===','&&!quote){row.push(cell.trim());cell='';continue}if((ch==='\n'||ch==='\r')&&!quote){if(ch==='\r'&&next==='\n')i++;row.push(cell.trim());cell='';if(row.some(Boolean))rows.push(row);row=[];continue}cell+=ch}if(cell||row.length){row.push(cell.trim());if(row.some(Boolean))rows.push(row)}return rows}
 function num(v){const n=Number(String(v??'').replace(/,/g,''));return Number.isFinite(n)?n:null}
 function norm(x){return String(x??'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')}
 function metricFor(h,file){const s=(h+' '+file).toLowerCase();const rules=[
@@ -31,7 +32,7 @@ export default async function(req,res){
 
  for(const file of files){
   if(file.buffer.length>20*1024*1024){results.push({file:file.filename,error:'Skipped: file exceeds 20 MB.'});continue}
-  const rows=parseCSV(file.buffer.toString('utf8'));
+  const uploadPayload=[file.buffer,file.data,file.content].find(x=>x!=null&&((typeof x==='string'&&x.length)||x.byteLength||x.length)); const rows=parseCSV(decodeUpload(uploadPayload));
   if(rows.length<2){results.push({file:file.filename,error:'Skipped: no data rows.'});continue}
   const headers=rows[0].map(norm),sourceTable=file.filename.replace(/\.csv$/i,'');
   const events=[],participants=new Set(),metrics=new Set();
@@ -43,7 +44,8 @@ export default async function(req,res){
   for(const row of rows.slice(1)){
    const pid=participant(row,headers),sd=studyDay(row,headers);
    const profileBase=(req.body&&req.body.profileKey)||'mcphases';
-   const profileKey=pid?profileBase+'_'+pid:profileBase;profileKeys.add(profileKey);
+   // Uploaded data belongs to the signed-in user's story. Keep participant_id as metadata rather than splitting the user's story into hidden profile keys.
+   const profileKey=profileBase;profileKeys.add(profileKey);
    if(pid)participants.add(pid);
    if(isLongFormat){
     const rawMetric=String(row[longMetric]||'').trim();
@@ -64,6 +66,7 @@ export default async function(req,res){
    }
   }
   let fileInserted=0;
+  let eventsParsed=events.length;
   if(events.length){
    const payload=JSON.stringify(events);
    const q=await db.query(
@@ -83,7 +86,7 @@ export default async function(req,res){
    );
    fileInserted=q.rowCount||0;inserted+=fileInserted;
   } else fileInserted=0;
-  results.push({file:file.filename,eventsInserted:fileInserted,participants:[...participants],metrics:[...metrics]});
+  results.push({file:file.filename,eventsParsed,eventsInserted:fileInserted,duplicatesSkipped:Math.max(0,eventsParsed-fileInserted),participants:[...participants],metrics:[...metrics]});
  }
- res.json({ok:true,eventsInserted:inserted,files:results,profileKey:[...profileKeys][0]||((req.body&&req.body.profileKey)||'mcphases'),profileKeys:[...profileKeys]});
+ res.json({ok:true,eventsParsed:results.reduce((n,f)=>n+Number(f.eventsParsed||0),0),eventsInserted:inserted,duplicatesSkipped:results.reduce((n,f)=>n+Number(f.duplicatesSkipped||0),0),files:results,profileKey:[...profileKeys][0]||((req.body&&req.body.profileKey)||'mcphases'),profileKeys:[...profileKeys]});
 }
