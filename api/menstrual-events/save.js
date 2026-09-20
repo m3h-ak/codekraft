@@ -1,5 +1,5 @@
 import { db } from 'hatchable';
-export const access='public';
+export const access='user';
 export const methods=['POST'];
 export default async function(req,res){
  const b=req.body||{},key=b.profileKey||'my-health-story';

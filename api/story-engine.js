@@ -1,6 +1,6 @@
 import { db, ai } from 'hatchable';
 
-export const access = 'public';
+export const access = 'user';
 export const methods = ['GET'];
 
 const inverse = new Set(['hrv','sleep','activity','steps']);

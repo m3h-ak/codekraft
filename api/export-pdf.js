@@ -1,6 +1,6 @@
 import { browser } from 'hatchable';
 
-export const access = 'public';
+export const access = 'user';
 export const methods = ['GET'];
 
 export default async function(req,res){

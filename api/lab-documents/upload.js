@@ -1,7 +1,7 @@
 import { storage, db } from 'hatchable';
 import crypto from 'node:crypto';
 
-export const access = 'public';
+export const access = 'user';
 export const methods = ['POST'];
 
 const MAX_BYTES = 12 * 1024 * 1024;

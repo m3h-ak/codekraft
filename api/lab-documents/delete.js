@@ -1,6 +1,6 @@
 import { db, storage } from 'hatchable';
 
-export const access = 'public';
+export const access = 'user';
 export const methods = ['DELETE'];
 
 export default async function(req,res){

@@ -1,4 +1,4 @@
-export const access = 'public';
+export const access = 'user';
 export const methods = ['GET'];
 
 const days = Array.from({length: 56}, (_, i) => i);

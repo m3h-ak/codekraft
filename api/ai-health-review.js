@@ -1,5 +1,5 @@
 import { db, ai } from 'hatchable';
-export const access='public';
+export const access='user';
 export const methods=['POST'];
 const clip=(v,n)=>JSON.stringify(v).slice(0,n);
 export default async function(req,res){

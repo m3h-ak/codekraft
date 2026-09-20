@@ -1,6 +1,6 @@
 import { db } from 'hatchable';
 
-export const access = 'public';
+export const access = 'user';
 export const methods = ['GET'];
 
 function median(xs){const a=xs.filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2}

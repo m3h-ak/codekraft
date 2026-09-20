@@ -1,6 +1,6 @@
 import { ai } from 'hatchable';
 
-export const access = 'public';
+export const access = 'user';
 export const methods = ['POST'];
 
 export default async function(req,res){

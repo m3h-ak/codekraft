@@ -5,4 +5,7 @@ required = true
 name = "AI_PROVIDER"
 
 [auth]
-enabled = false
+enabled = true
+providers = ["email"]
+hosted_login = true
+login_path = "/login"

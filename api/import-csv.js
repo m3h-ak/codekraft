@@ -1,6 +1,6 @@
 import { db } from 'hatchable';
 
-export const access = 'public';
+export const access = 'user';
 export const methods = ['POST'];
 
 function parseCSV(text){const rows=[];let row=[],cell='',quote=false;for(let i=0;i<text.length;i++){const ch=text[i],next=text[i+1];if(ch==='"'&&quote&&next==='"'){cell+='"';i++;continue}if(ch==='"'){quote=!quote;continue}if(ch===','&&!quote){row.push(cell.trim());cell='';continue}if((ch==='\n'||ch==='\r')&&!quote){if(ch==='\r'&&next==='\n')i++;row.push(cell.trim());cell='';if(row.some(Boolean))rows.push(row);row=[];continue}cell+=ch}if(cell||row.length){row.push(cell.trim());if(row.some(Boolean))rows.push(row)}return rows}
