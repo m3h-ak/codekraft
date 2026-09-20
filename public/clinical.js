@@ -1,7 +1,7 @@
 (()=>{
 const P='my-health-story';
 const q=id=>document.getElementById(id);
-let cycles=[],events=[],calendarDate=new Date();
+let cycles=[],events=[],calendarDate=new Date(),healthSeries=[],selectedMetric='restingHR';
 const pad=n=>String(n).padStart(2,'0');
 const iso=(y,m,d)=>y+'-'+pad(m+1)+'-'+pad(d);
 const parseDate=s=>{const [y,m,d]=String(s).slice(0,10).split('-').map(Number);return new Date(Date.UTC(y,m-1,d));};
@@ -27,6 +27,14 @@ function renderCalendar(){
  q('calendarNext').onclick=()=>{calendarDate=new Date(Date.UTC(y,m+1,1));renderCalendar()};
  root.querySelectorAll('[data-calendar-date]').forEach(btn=>btn.onclick=()=>showDay(btn.dataset.calendarDate));
 }
+function renderDailyChart(){
+ const root=q('cycleDailyChart');if(!root)return;
+ const cycle=cycles[0];if(!cycle){root.innerHTML='<div class="cycle-empty">Log a cycle to see the daily view.</div>';return;}
+ const start=parseDate(cycle.cycle_start),end=cycle.cycle_end?parseDate(cycle.cycle_end):(healthSeries.length?parseDate(healthSeries.at(-1).date):start);
+ const rows=[];for(let d=new Date(start);d<=end;d.setUTCDate(d.getUTCDate()+1)){const date=iso(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()),s=healthSeries.find(x=>x.date===date),es=events.filter(e=>e.event_date===date);rows.push({date,value:s?.[selectedMetric]??s?.values?.[selectedMetric]??null,events:es,day:Math.round((d-start)/86400000)+1});}
+ const vals=rows.map(r=>Number(r.value)).filter(Number.isFinite),min=vals.length?Math.min(...vals):0,max=vals.length?Math.max(...vals):1,range=max-min||1;
+ root.innerHTML='<div class="cycle-chart-scroll"><div class="cycle-chart-grid">'+rows.map(r=>{const h=Number.isFinite(Number(r.value))?Math.max(8,((Number(r.value)-min)/range)*76+8):4;const bleeding=r.events.find(e=>e.event_type==='bleeding');const flow=bleeding?.value_numeric??(bleeding?2:0);return '<div class="cycle-chart-day"><div class="cycle-chart-value">'+(r.value==null?'—':Number(r.value).toFixed(1))+'</div><div class="cycle-chart-bar-wrap"><i class="cycle-chart-bar" style="height:'+h+'px"></i></div><div class="cycle-flow" title="'+(bleeding?'Bleeding logged':'No bleeding logged')+'"><i style="height:'+Math.max(0,Math.min(4,Number(flow)))*5+'px"></i></div><span>D'+r.day+'</span><small>'+r.date.slice(5)+'</small><div class="cycle-event-mini">'+r.events.filter(e=>e.event_type!=='bleeding').slice(0,3).map(e=>'<i title="'+String(e.event_type).replaceAll('_',' ')+'"></i>').join('')+'</div></div>'}).join('')+'</div></div><div class="cycle-chart-key"><span>Signal</span><span>Flow intensity</span><span>• symptoms/events</span></div>';
+}
 function showDay(date){
  const cycle=cycleForDate(date),dayEvents=events.filter(e=>e.event_date===date);
  const parts=[];if(cycle)parts.push('<b>Cycle day</b> · '+cycle.cycle_start+(cycle.cycle_end?' → '+cycle.cycle_end:' · ongoing'));
@@ -34,19 +42,20 @@ function showDay(date){
  const target=q('cycleDayDetail');if(target){target.innerHTML=parts.length?'<b>'+date+'</b><div>'+parts.join('<br>')+'</div>':'<b>'+date+'</b><div class="muted">No cycle or event data logged for this day.</div>';target.classList.add('visible');}
 }
 async function load(){
- const a=await fetch('/api/menstrual-cycles/list?profileKey='+P),b=await fetch('/api/menstrual-events/list?profileKey='+P),g=await fetch('/api/clinical-guidance?profileKey='+P);
- cycles=a.ok?(await a.json()).cycles||[]:[];events=b.ok?(await b.json()).events||[]:[];const x=g.ok?await g.json():{status:'none'};
+ const a=await fetch('/api/menstrual-cycles/list?profileKey='+P),b=await fetch('/api/menstrual-events/list?profileKey='+P),g=await fetch('/api/clinical-guidance?profileKey='+P),h=await fetch('/api/health-story?profileKey='+P);
+ cycles=a.ok?(await a.json()).cycles||[]:[];events=b.ok?(await b.json()).events||[]:[];const x=g.ok?await g.json():{status:'none'};healthSeries=h.ok?(await h.json()).series||[]:[];
  if(cycles.length){const latest=parseDate(cycles[0].cycle_start);calendarDate=new Date(Date.UTC(latest.getUTCFullYear(),latest.getUTCMonth(),1));}
  if(q('cycleCount'))q('cycleCount').textContent=cycles.length;if(q('cycleHistoryCount'))q('cycleHistoryCount').textContent=cycles.length+' logged';
  if(q('cycleList'))q('cycleList').innerHTML=cycles.length?cycles.map(v=>'<div class="cycle-history-row"><div><strong>'+v.cycle_start+'</strong><span>'+(v.cycle_end?' → '+v.cycle_end:' · ongoing')+'</span></div><em>'+(v.flow||'Flow not recorded')+'</em></div>').join(''):'<div class="cycle-empty">No previous cycles yet.</div>';
  if(q('cycleStatus'))q('cycleStatus').textContent=cycles.length?'Latest cycle':'No cycle yet';
  renderCalendar();
+ renderDailyChart();
  const latest=cycles[0];if(q('cycleDayDetail')&&latest)q('cycleDayDetail').innerHTML='<b>'+latest.cycle_start+'</b><div>Select a day in the calendar to see logged events.</div>';
  if(q('menstrualEventList'))q('menstrualEventList').innerHTML=events.length?events.slice(0,20).map(v=>'<span class="event-chip"><b>'+v.event_date+'</b> '+String(v.event_type).replaceAll('_',' ')+'</span>').join(''):'<div class="cycle-empty">No events logged yet.</div>';
  if(q('approvedGuidance'))q('approvedGuidance').textContent=x.status==='approved'?(x.summary||'Clinician-approved guidance is available.'):(x.status==='pending'?'AI review is waiting for clinician confirmation.':'No clinician-approved guidance yet.');
 }
 async function sendReview(){if(q('clinicalReviewStatus'))q('clinicalReviewStatus').textContent='Reading changes, labs, symptoms and cycle data…';const r=await fetch('/api/ai-health-review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profileKey:P})});const j=await r.json();if(q('clinicalReviewStatus'))q('clinicalReviewStatus').textContent=r.ok?'AI draft sent to clinician. Nothing will be shown as medical guidance until they confirm it. Review #'+j.reviewId:(j.error||'Could not create review.');load();}
-q('runClinicalReview')?.addEventListener('click',sendReview);q('sendClinicalReview')?.addEventListener('click',sendReview);
+q('runClinicalReview')?.addEventListener('click',sendReview);q('sendClinicalReview')?.addEventListener('click',sendReview);q('cycleMetric')?.addEventListener('change',e=>{selectedMetric=e.target.value;renderDailyChart()});
 q('cycleForm')?.addEventListener('submit',async e=>{e.preventDefault();const b={profileKey:P,cycleStart:q('cycleStart').value,cycleEnd:q('cycleEnd').value,flow:q('cycleFlow').value,notes:q('cycleNotes').value};const r=await fetch('/api/menstrual-cycles/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});q('cycleResult').textContent=r.ok?'Cycle saved.':'Could not save cycle.';if(r.ok){q('cycleForm').reset();await load();}});
 q('menstrualEventForm')?.addEventListener('submit',async e=>{e.preventDefault();const b={profileKey:P,eventDate:q('eventDate').value,eventType:q('eventType').value,valueNumeric:q('eventValue').value,valueText:q('eventText').value,unit:q('eventUnit').value,notes:q('eventNotes')?.value||''};const r=await fetch('/api/menstrual-events/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});q('eventResult').textContent=r.ok?'Cycle event saved.':'Could not save event.';if(r.ok){q('menstrualEventForm').reset();await load();}});
 load();
