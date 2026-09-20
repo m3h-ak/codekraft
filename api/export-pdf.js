@@ -5,8 +5,7 @@ export const methods = ['GET'];
 
 export default async function(req,res){
   const profileKey = req.query?.profileKey || 'my-health-story';
-  const base = new URL(req.url).origin;
-  const reportUrl = base + '/doctor-report?profileKey=' + encodeURIComponent(profileKey);
+  const reportUrl = 'https://pulsestory.hatchable.site/doctor-report?profileKey=' + encodeURIComponent(profileKey);
   try {
     const pdf = await browser.pdf(reportUrl, { format:'A4', printBackground:true });
     res.setHeader('Content-Type','application/pdf');
